@@ -7,13 +7,14 @@
     var camera1, camera2, camera3, camera4;
     var plane1, plane2, model, texture;
     var step = 0.0;
-    var cv_cap, cv_frame, cv_gray, cv_canvas, cv_canvas2;
+    var cv_cap, cv_frame, cv_gray, cv_canvas, cv_canvas2, cv_canvas3;
     var cv_ready = false;
     var settings;
 
     var Settings = function() {
       this.thresh_block = 33
       this.thresh_C = 2
+      this.threshold_method = cv.ADAPTIVE_THRESH_MEAN_C
 
       this.epsilon = 10
 
@@ -27,6 +28,8 @@
       var gui = new dat.GUI();
       gui.add(settings, 'thresh_block', 3, 99, 1).name('block size').onChange(function(value) { if (value % 2 === 0) settings.thresh_block = value + 1;});
       gui.add(settings, "thresh_C").min(1).step(1)
+     // gui.add(settings, 'threshold_method',  {"GAUSSIAN_C" : cv.ADAPTIVE_THRESH_GAUSSIAN_C, 
+      //                                        "MEAN_C": cv.ADAPTIVE_THRESH_MEAN_C})
       gui.add(settings, 'epsilon').min(1).step(1)
 
 
@@ -40,6 +43,7 @@
         cv_gray  = new cv.Mat(video.height, video.width, cv.CV_8UC1);
         cv_canvas = document.getElementById("canvas_cv");
         cv_canvas2 = document.getElementById("canvas_cv2");
+        cv_canvas3 = document.getElementById("canvas_cv3");
         //cv_ctx = cv_canvas.getContext('2d');
         cv_canvas.width = parseInt(cv_canvas.style.width);
         cv_canvas.height = parseInt(cv_canvas.style.height);
@@ -112,12 +116,11 @@
       if (cv_ready) {
         cv_cap.read(cv_frame)
         cv.cvtColor(cv_frame, cv_gray, cv.COLOR_RGBA2GRAY )
-        cv.adaptiveThreshold(cv_gray, cv_gray, 255, cv.ADAPTIVE_THRESH_MEAN_C , cv.THRESH_BINARY, settings.thresh_block, settings.thresh_C ); //https://www.tutorialspoint.com/opencv/opencv_adaptive_threshold.htm
-        cv.imshow("canvas_cv", cv_gray);
+        cv.adaptiveThreshold(cv_gray, cv_gray, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C  , cv.THRESH_BINARY, settings.thresh_block, settings.thresh_C ); //https://www.tutorialspoint.com/opencv/opencv_adaptive_threshold.htm
         let contours = new cv.MatVector();
         let hierarchy = new cv.Mat();
         cv.findContours(cv_gray, contours, hierarchy, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)  // https://docs.opencv.org/master/dc/dcf/tutorial_js_contour_features.html
-        let color = new cv.Scalar(0,255,0)
+        //let color = new cv.Scalar(0,255,0)
         //cv.drawContours(cv_frame, contours, -1, color, 1)
 
         let poly = new cv.MatVector();
@@ -133,12 +136,34 @@
               poly.push_back(approxCurve);
             //}
           }
-          
+          approxCurve.delete()
         }
-        cv.drawContours(cv_frame, poly, -1, color, 1);
 
-        cv.imshow("canvas_cv2", cv_frame);
+        for (let i = 0; i < poly.size(); i++) {
+        //for (let i = 0; i < 1); i++) {
+            // https://docs.opencv.org/4.3.0/d4/d61/tutorial_warp_affine.html
+          // https://docs.opencv.org/3.4/dd/d52/tutorial_js_geometric_transformations.html
+      
+          let dstTri = cv.matFromArray(3, 1, cv.CV_32FC2, [0, 0,  cv_gray.rows, 0,   cv_gray.rows,  cv_gray.cols]);
+          let pp = poly.get(i).data32S.slice(0,6);
+          let srcTri = cv.matFromArray(3, 1, cv.CV_32FC2, pp);
+
+          warp_mat = cv.getAffineTransform( srcTri, dstTri );
+          let homography = new cv.Mat();
+          let d_size = new cv.Size(cv_gray.rows, cv_gray.cols)
+          cv.warpAffine(cv_gray, homography, warp_mat, d_size); 
+          cv.imshow("canvas_cv3", homography);
+          homography.delete();
+        }
+
+        let color = new cv.Scalar(0,255,0)
+        cv.drawContours(cv_frame, poly, -1, color, 1);
+        cv.imshow("canvas_cv", cv_frame);
+        cv.imshow("canvas_cv2", cv_gray);
+
         
+        contours.delete(); hierarchy.delete(); poly.delete(); 
+
       }
 
     };
